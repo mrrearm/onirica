@@ -1,5 +1,7 @@
 package com.onirica.dreamjournal.interpreter
 
+import kotlin.random.Random
+
 /**
  * Motore di interpretazione dei sogni completamente locale e deterministico.
  *
@@ -7,13 +9,14 @@ package com.onirica.dreamjournal.interpreter
  * da nessuna libreria di intelligenza artificiale: analizza il testo del
  * sogno confrontandolo con un dizionario di simboli onirici (ispirato alla
  * tradizione junghiana) e con un piccolo lessico emotivo, poi compone
- * un'interpretazione leggibile a partire da template testuali.
+ * un'interpretazione in prosa continua a partire da più varianti testuali.
  *
- * Se nessun simbolo del dizionario compare nel racconto, il motore non si
- * arrende: individua le parole più significative e ricorrenti del testo
- * (escludendo articoli, congiunzioni, ecc.) e le propone come "simboli
- * personali", così l'interpretazione ha sempre qualcosa di concreto su cui
- * riflettere anche per sogni molto specifici o insoliti.
+ * A differenza di una versione "a template fisso", ogni sezione ha diverse
+ * formulazioni alternative. La scelta tra le varianti è deterministica
+ * (basata su un seed derivato dal testo del sogno): lo stesso sogno produce
+ * sempre la stessa lettura se rianalizzato, ma sogni diversi - anche con
+ * simboli simili - risultano scritti in modo diverso, evitando l'effetto
+ * "sempre lo stesso paragrafo".
  */
 object DreamInterpreter {
 
@@ -24,67 +27,151 @@ object DreamInterpreter {
         val mood: String
     )
 
-    private data class Symbol(val keywords: List<String>, val label: String, val meaning: String)
+    private data class Symbol(val keywords: List<String>, val label: String, val meanings: List<String>)
 
-    // Dizionario simbolico: parola chiave -> significato archetipico.
-    // Facilmente estendibile aggiungendo nuove voci a questa lista.
+    // Dizionario simbolico: ogni simbolo ha più formulazioni possibili del
+    // proprio significato, per evitare che compaia sempre la stessa frase.
     private val symbolDictionary = listOf(
-        Symbol(listOf("acqua", "mare", "oceano", "onde", "nuotare", "fiume", "lago", "piscina", "pioggia"), "Acqua",
-            "l'acqua rimanda al mondo emotivo e all'inconscio: la sua calma o il suo tumulto riflettono lo stato interiore di chi sogna."),
-        Symbol(listOf("volare", "volo", "ali", "cielo", "librarsi", "planare"), "Volo",
-            "volare in sogno esprime spesso un desiderio di libertà, di superare un limite o un ostacolo percepito nella vita da svegli."),
-        Symbol(listOf("cadere", "caduta", "precipizio", "precipitare", "sprofondare"), "Caduta",
-            "la caduta è tra i simboli più antichi del sogno: segnala insicurezza, perdita di controllo o paura di un fallimento imminente."),
-        Symbol(listOf("casa", "stanza", "porta", "corridoio", "finestra", "soffitta", "cantina", "scale"), "Casa",
-            "la casa rappresenta la struttura del sé: le sue stanze sono spesso lette come diverse parti della personalità da esplorare."),
-        Symbol(listOf("morte", "morire", "funerale", "tomba", "lapide", "bara"), "Morte",
-            "la morte onirica raramente è letterale: più spesso annuncia la fine di una fase e l'inizio di una trasformazione."),
-        Symbol(listOf("inseguito", "inseguimento", "fuggire", "scappare", "correre via", "nascondersi"), "Inseguimento",
-            "essere inseguiti riflette un evitamento: qualcosa - un'emozione, una responsabilità - che si preferisce non affrontare direttamente."),
-        Symbol(listOf("nudo", "nuda", "spogliato", "spogliata", "vestiti"), "Nudità",
-            "la nudità in sogno tocca il tema della vulnerabilità e del timore di essere giudicati per ciò che si è realmente."),
-        Symbol(listOf("denti", "dente", "perdere i denti"), "Denti",
-            "la perdita dei denti è un classico simbolo di ansia legata all'immagine di sé, al tempo che passa o alla paura di perdere potere personale."),
-        Symbol(listOf("serpente", "serpenti", "vipera"), "Serpente",
-            "il serpente è un simbolo ambivalente: trasformazione e rinnovamento, ma anche minaccia latente o tradimento."),
-        Symbol(listOf("bambino", "bambina", "neonato", "bimbo", "bimba"), "Bambino",
-            "il bambino onirico rappresenta spesso una parte nuova, fragile e ancora in crescita di sé, o un progetto appena nato."),
-        Symbol(listOf("buio", "oscurità", "notte", "ombra", "tenebre"), "Ombra",
-            "l'oscurità richiama l'archetipo dell'Ombra junghiana: gli aspetti di sé non ancora riconosciuti o accettati."),
-        Symbol(listOf("specchio", "riflesso"), "Specchio",
-            "lo specchio invita a un confronto diretto con l'immagine che si ha di sé, a volte rivelandone una versione distorta o inattesa."),
-        Symbol(listOf("scuola", "esame", "interrogazione", "compito", "professore", "professoressa"), "Esame",
-            "sognare un esame segnala il timore di essere valutati o di non essere all'altezza di un'aspettativa, propria o altrui."),
-        Symbol(listOf("treno", "aereo", "auto", "macchina", "strada", "viaggio", "autobus", "bicicletta", "nave", "barca"), "Viaggio",
-            "i mezzi di trasporto rappresentano il percorso di vita: perderli o guidarli male esprime il senso di controllo (o la sua assenza) sulla propria direzione."),
-        Symbol(listOf("fuoco", "incendio", "fiamme", "brucia", "bruciare"), "Fuoco",
-            "il fuoco è energia trasformativa: può indicare passione intensa oppure una situazione emotiva che rischia di sfuggire di mano."),
-        Symbol(listOf("animale", "animali", "cane", "gatto", "lupo", "leone", "uccello", "cavallo", "orso", "pesce", "insetto", "ragno", "farfalla"), "Animale",
-            "le figure animali incarnano istinti e pulsioni non del tutto integrati nella vita cosciente."),
-        Symbol(listOf("labirinto", "perso", "persa", "smarrito", "smarrita", "disorientato", "disorientata"), "Smarrimento",
-            "sentirsi persi in un labirinto riflette un momento di incertezza rispetto a una scelta o a una direzione da prendere."),
-        Symbol(listOf("tempesta", "temporale", "uragano", "fulmine", "fulmini"), "Tempesta",
-            "la tempesta è emozione che preme per esprimersi: un conflitto interiore vicino a raggiungere il culmine."),
-        Symbol(listOf("volto", "faccia", "maschera", "irriconoscibile"), "Maschera",
-            "una maschera o un volto irriconoscibile suggeriscono la distanza tra il sé pubblico e quello autentico."),
-        Symbol(listOf("gravidanza", "incinta", "partorire", "parto"), "Gravidanza",
-            "la gravidanza onirica, al di là del significato letterale, è spesso metafora di un progetto o un'idea in gestazione."),
-        Symbol(listOf("lavoro", "ufficio", "capo", "collega", "riunione", "licenziato", "licenziata"), "Lavoro",
-            "gli scenari lavorativi nei sogni parlano spesso di riconoscimento, prestazione e del peso delle responsabilità quotidiane."),
-        Symbol(listOf("matrimonio", "sposa", "sposo", "sposarsi", "anello"), "Unione",
-            "il matrimonio onirico simboleggia un'unione, non necessariamente romantica: può indicare l'integrazione di parti diverse di sé."),
-        Symbol(listOf("soldi", "denaro", "monete", "banconote", "portafoglio", "ricco", "ricca", "povero", "povera"), "Denaro",
-            "il denaro nei sogni è spesso metafora di valore personale, energia vitale o sicurezza, più che una questione puramente economica."),
-        Symbol(listOf("montagna", "vetta", "salita", "scalare", "arrampicarsi"), "Montagna",
-            "salire una montagna rappresenta uno sforzo verso un obiettivo importante e il desiderio di guadagnare una prospettiva più ampia."),
-        Symbol(listOf("chiave", "chiavi", "serratura", "bloccato", "bloccata", "intrappolato", "intrappolata"), "Soglia",
-            "chiavi, serrature e porte chiuse parlano di accessi negati o desiderati: qualcosa che si vuole raggiungere ma non si riesce ancora ad aprire."),
-        Symbol(listOf("fantasma", "fantasmi", "spirito", "presenza"), "Presenza invisibile",
-            "presenze non del tutto definite nel sogno spesso incarnano emozioni o ricordi non ancora del tutto elaborati."),
-        Symbol(listOf("esplosione", "esplodere", "bomba", "guerra", "battaglia", "combattimento"), "Conflitto",
-            "scene di conflitto o distruzione riflettono tensioni interiori che cercano una via di scarico o di risoluzione."),
-        Symbol(listOf("spiaggia", "sole", "tramonto", "alba"), "Luce naturale",
-            "luce, albe e tramonti accompagnano spesso momenti di passaggio, chiusura o apertura di un ciclo emotivo.")
+        Symbol(listOf("acqua", "mare", "oceano", "onde", "nuotare", "fiume", "lago", "piscina", "pioggia"), "Acqua", listOf(
+            "l'acqua richiama il mondo emotivo e l'inconscio: la sua calma o il suo tumulto sembrano rispecchiare qualcosa del tuo stato interiore in questo periodo",
+            "dove compare l'acqua, il sogno sta probabilmente parlando di emozioni: quanto erano limpide o agitate, in quel momento del sogno?",
+            "l'elemento acquatico porta con sé un invito ad ascoltare ciò che senti, più che ciò che pensi, riguardo a quanto stai vivendo"
+        )),
+        Symbol(listOf("volare", "volo", "ali", "cielo", "librarsi", "planare"), "Volo", listOf(
+            "volare in sogno esprime spesso un desiderio di libertà, di superare un limite che senti stretto nella vita da sveglio",
+            "il volo è tra i simboli più diretti di voglia di elevarsi al di sopra di una situazione che ti sta pesando",
+            "sollevarsi da terra nel sogno può indicare che stai cercando, anche solo mentalmente, un punto di vista diverso su qualcosa"
+        )),
+        Symbol(listOf("cadere", "caduta", "precipizio", "precipitare", "sprofondare"), "Caduta", listOf(
+            "la caduta è tra i simboli più antichi del sogno: segnala spesso insicurezza o la sensazione di perdere il controllo su qualcosa",
+            "precipitare nel sogno accompagna in genere la paura di non essere all'altezza di una situazione imminente",
+            "cadere può riflettere il timore che qualcosa a cui tieni ti stia sfuggendo di mano proprio ora"
+        )),
+        Symbol(listOf("casa", "stanza", "porta", "corridoio", "finestra", "soffitta", "cantina", "scale"), "Casa", listOf(
+            "la casa rappresenta spesso la struttura del sé: le sue stanze possono essere lette come parti diverse della tua personalità da esplorare",
+            "muoversi tra stanze e corridoi nel sogno somiglia a un attraversamento interiore, tra ciò che conosci di te e ciò che è ancora inesplorato",
+            "una casa sconosciuta o diversa dal solito suggerisce che qualcosa nella tua identità sta cambiando forma in questo periodo"
+        )),
+        Symbol(listOf("morte", "morire", "funerale", "tomba", "lapide", "bara"), "Morte", listOf(
+            "la morte onirica raramente va presa alla lettera: più spesso annuncia la fine di una fase e l'inizio di una trasformazione",
+            "sognare la morte accompagna in genere un cambiamento profondo già in corso, non un presagio da temere",
+            "questo simbolo parla di chiusura: qualcosa dentro di te sta lasciando spazio a qualcos'altro"
+        )),
+        Symbol(listOf("inseguito", "inseguimento", "fuggire", "scappare", "correre via", "nascondersi"), "Inseguimento", listOf(
+            "essere inseguiti riflette spesso un evitamento: qualcosa che preferisci non affrontare direttamente nella vita reale",
+            "la fuga nel sogno racconta di una tensione che rincorre da vicino, anche se magari nella veglia la tieni a distanza",
+            "chi o cosa ti insegue nel sogno può essere una versione simbolica di un pensiero o una responsabilità che eviti di guardare in faccia"
+        )),
+        Symbol(listOf("nudo", "nuda", "spogliato", "spogliata", "vestiti"), "Nudità", listOf(
+            "la nudità in sogno tocca spesso il tema della vulnerabilità e del timore di essere giudicati per ciò che si è davvero",
+            "sentirsi esposti nel sogno parla di quanto, nella vita reale, ti senti al sicuro nel mostrarti senza filtri agli altri",
+            "questo simbolo emerge spesso in momenti in cui ti senti osservato o valutato più del solito"
+        )),
+        Symbol(listOf("denti", "dente", "perdere i denti"), "Denti", listOf(
+            "la perdita dei denti è un classico simbolo di ansia legata all'immagine di sé o alla paura di perdere potere personale",
+            "sognare i denti che cadono accompagna spesso periodi in cui ti senti meno sicuro di come ti presenti agli altri",
+            "questo simbolo torna frequentemente quando avverti il passare del tempo o un cambiamento nel proprio aspetto o ruolo"
+        )),
+        Symbol(listOf("serpente", "serpenti", "vipera"), "Serpente", listOf(
+            "il serpente è un simbolo ambivalente: trasformazione e rinnovamento, ma anche minaccia latente o tradimento, a seconda del contesto",
+            "la presenza di un serpente nel sogno spesso indica un'energia che sta cambiando forma dentro di te, per meglio o per peggio",
+            "questo simbolo invita a chiederti se c'è qualcosa, in una relazione o situazione, che percepisci come non del tutto sincero"
+        )),
+        Symbol(listOf("bambino", "bambina", "neonato", "bimbo", "bimba"), "Bambino", listOf(
+            "il bambino onirico rappresenta spesso una parte nuova e fragile di te, o un progetto ancora in crescita",
+            "un bambino nel sogno può incarnare la parte più spontanea e vulnerabile della tua personalità",
+            "questo simbolo compare spesso quando qualcosa nella tua vita è appena nato e ha ancora bisogno di cure e attenzione"
+        )),
+        Symbol(listOf("buio", "oscurità", "notte", "ombra", "tenebre"), "Ombra", listOf(
+            "l'oscurità richiama l'archetipo junghiano dell'Ombra: gli aspetti di te non ancora riconosciuti o accettati del tutto",
+            "il buio nel sogno non è necessariamente negativo: a volte segnala solo che stai esplorando territori interiori poco familiari",
+            "muoversi nell'oscurità del sogno suggerisce che stai cercando di orientarti in una situazione poco chiara della tua vita"
+        )),
+        Symbol(listOf("specchio", "riflesso"), "Specchio", listOf(
+            "lo specchio invita a un confronto diretto con l'immagine che hai di te stesso, a volte rivelandone una versione inattesa",
+            "vedersi riflessi nel sogno spesso accompagna una fase di autovalutazione, magari più severa del solito",
+            "questo simbolo chiede: ti riconosci davvero in ciò che il sogno ti ha mostrato di te?"
+        )),
+        Symbol(listOf("scuola", "esame", "interrogazione", "compito", "professore", "professoressa"), "Esame", listOf(
+            "sognare un esame segnala spesso il timore di essere valutati, o di non essere all'altezza di un'aspettativa propria o altrui",
+            "questo simbolo torna nei momenti in cui senti che le tue capacità sono sotto osservazione, anche solo nella tua testa",
+            "un esame nel sogno parla di prestazione: c'è qualcosa su cui ti senti costantemente sotto giudizio in questo periodo?"
+        )),
+        Symbol(listOf("treno", "aereo", "auto", "macchina", "strada", "viaggio", "autobus", "bicicletta", "nave", "barca"), "Viaggio", listOf(
+            "i mezzi di trasporto rappresentano spesso il tuo percorso di vita: perderli o guidarli male esprime quanto senti di avere il controllo sulla tua direzione",
+            "un viaggio nel sogno racconta del cammino che stai percorrendo, con le sue deviazioni, i suoi ritardi o le sue accelerazioni improvvise",
+            "questo simbolo invita a chiederti se, nella vita reale, ti senti tu al volante della situazione o più in balìa degli eventi"
+        )),
+        Symbol(listOf("fuoco", "incendio", "fiamme", "brucia", "bruciare"), "Fuoco", listOf(
+            "il fuoco è energia trasformativa: può indicare una passione intensa oppure una situazione emotiva vicina a sfuggire di mano",
+            "le fiamme nel sogno parlano spesso di qualcosa che si sta consumando rapidamente - un'idea, una relazione, un'energia",
+            "questo simbolo chiede attenzione: c'è qualcosa che sta bruciando dentro di te più velocemente di quanto pensassi?"
+        )),
+        Symbol(listOf("animale", "animali", "cane", "gatto", "lupo", "leone", "uccello", "cavallo", "orso", "pesce", "insetto", "ragno", "farfalla"), "Animale", listOf(
+            "le figure animali incarnano spesso istinti e pulsioni non del tutto integrati nella vita cosciente",
+            "un animale nel sogno può rappresentare una parte di te più istintiva, che magari nella veglia tieni sotto controllo",
+            "il comportamento dell'animale nel sogno - amichevole o minaccioso - dice molto su come vivi quell'istinto in questo momento"
+        )),
+        Symbol(listOf("labirinto", "perso", "persa", "smarrito", "smarrita", "disorientato", "disorientata"), "Smarrimento", listOf(
+            "sentirsi persi in un labirinto riflette spesso un momento di incertezza rispetto a una scelta o a una direzione da prendere",
+            "questo simbolo emerge quando ti senti davanti a troppe strade possibili, senza sapere quale imboccare per prima",
+            "lo smarrimento onirico non sempre è un cattivo segno: a volte prepara il terreno a una decisione che stai per prendere"
+        )),
+        Symbol(listOf("tempesta", "temporale", "uragano", "fulmine", "fulmini"), "Tempesta", listOf(
+            "la tempesta è emozione che preme per esprimersi: un conflitto interiore vicino a raggiungere il suo culmine",
+            "un temporale nel sogno racconta spesso di tensioni accumulate che chiedono, prima o poi, di trovare sfogo",
+            "questo simbolo suggerisce che qualcosa dentro di te è più carico, elettrico, di quanto lasci trasparire di giorno"
+        )),
+        Symbol(listOf("volto", "faccia", "maschera", "irriconoscibile"), "Maschera", listOf(
+            "una maschera o un volto irriconoscibile suggeriscono la distanza tra il sé che mostri agli altri e quello più autentico",
+            "questo simbolo compare spesso quando senti di dover recitare una parte diversa da chi sei davvero, in qualche contesto della tua vita",
+            "un volto che cambia o si nasconde nel sogno invita a chiederti quanto ti senti visto per come sei realmente"
+        )),
+        Symbol(listOf("gravidanza", "incinta", "partorire", "parto"), "Gravidanza", listOf(
+            "la gravidanza onirica, al di là del significato letterale, è spesso metafora di un progetto o un'idea ancora in gestazione",
+            "questo simbolo parla di qualcosa che stai portando avanti dentro di te, non ancora pronto per essere mostrato al mondo",
+            "sognare una gravidanza può indicare l'attesa - a volte impaziente, a volte serena - di qualcosa che sta per nascere nella tua vita"
+        )),
+        Symbol(listOf("lavoro", "ufficio", "capo", "collega", "riunione", "licenziato", "licenziata"), "Lavoro", listOf(
+            "gli scenari lavorativi nei sogni parlano spesso di riconoscimento, prestazione e del peso delle responsabilità quotidiane",
+            "questo simbolo emerge quando il tema del valore personale si intreccia a doppio filo con quello che fai ogni giorno",
+            "un sogno ambientato al lavoro racconta spesso più di come ti senti valutato, che del lavoro in sé"
+        )),
+        Symbol(listOf("matrimonio", "sposa", "sposo", "sposarsi", "anello"), "Unione", listOf(
+            "il matrimonio onirico simboleggia un'unione, non necessariamente romantica: può indicare l'integrazione di parti diverse di te",
+            "questo simbolo parla spesso di un impegno che stai per prendere, o che senti di dover chiarire, con te stesso o con altri",
+            "sognare un'unione può riflettere il desiderio di far coincidere due parti di te che finora hai tenuto separate"
+        )),
+        Symbol(listOf("soldi", "denaro", "monete", "banconote", "portafoglio", "ricco", "ricca", "povero", "povera"), "Denaro", listOf(
+            "il denaro nei sogni è spesso metafora di valore personale ed energia vitale, più che una questione puramente economica",
+            "questo simbolo emerge quando ti interroghi su quanto vali, quanto dai e quanto ricevi in cambio, in un ambito della vita",
+            "perdere o trovare denaro nel sogno parla spesso di sicurezza percepita, non di conti in banca"
+        )),
+        Symbol(listOf("montagna", "vetta", "salita", "scalare", "arrampicarsi"), "Montagna", listOf(
+            "salire una montagna rappresenta spesso uno sforzo verso un obiettivo importante e il desiderio di una prospettiva più ampia",
+            "questo simbolo racconta di una fatica che percepisci come necessaria, per arrivare a vedere le cose da più in alto",
+            "una vetta nel sogno può indicare quanto ti senti vicino, o lontano, dal raggiungere qualcosa a cui tieni"
+        )),
+        Symbol(listOf("chiave", "chiavi", "serratura", "bloccato", "bloccata", "intrappolato", "intrappolata"), "Soglia", listOf(
+            "chiavi, serrature e porte chiuse parlano spesso di accessi negati o desiderati: qualcosa che vuoi raggiungere ma non riesci ancora ad aprire",
+            "questo simbolo emerge quando ti senti bloccato davanti a un passaggio che non sai ancora come attraversare",
+            "una porta chiusa nel sogno non significa necessariamente un rifiuto definitivo: a volte è solo un invito ad aspettare il momento giusto"
+        )),
+        Symbol(listOf("fantasma", "fantasmi", "spirito", "presenza"), "Presenza invisibile", listOf(
+            "presenze non del tutto definite nel sogno spesso incarnano emozioni o ricordi non ancora del tutto elaborati",
+            "questo simbolo compare quando qualcosa del passato continua a farsi sentire, anche se pensavi di averlo lasciato andare",
+            "una presenza indefinita nel sogno può rappresentare un pensiero che ti accompagna senza che tu riesca a metterlo del tutto a fuoco"
+        )),
+        Symbol(listOf("esplosione", "esplodere", "bomba", "guerra", "battaglia", "combattimento"), "Conflitto", listOf(
+            "scene di conflitto o distruzione riflettono spesso tensioni interiori che cercano una via di scarico o di risoluzione",
+            "questo simbolo emerge quando qualcosa dentro di te è arrivato a un punto di rottura, o teme di arrivarci presto",
+            "un conflitto nel sogno può rappresentare uno scontro tra due parti di te che stanno tirando in direzioni opposte"
+        )),
+        Symbol(listOf("spiaggia", "sole", "tramonto", "alba"), "Luce naturale", listOf(
+            "luce, albe e tramonti accompagnano spesso momenti di passaggio, la chiusura o l'apertura di un ciclo emotivo",
+            "questo simbolo suggerisce che una fase si sta chiudendo, o aprendo, in modo più naturale e meno traumatico di quanto temi",
+            "una luce calda nel sogno spesso indica che, nonostante tutto, c'è una parte di te che si sente più in pace del solito"
+        ))
     )
 
     private val positiveWords = listOf(
@@ -98,13 +185,10 @@ object DreamInterpreter {
         "soffocare", "intrappolato", "intrappolata", "rabbia", "tradimento", "panico", "incubo"
     )
 
-    // Parole troppo comuni per essere considerate "simboli personali" quando
-    // si ricorre all'estrazione di fallback (articoli, preposizioni, verbi
-    // ausiliari, connettivi, ecc.).
     private val stopWords = setOf(
         "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "di", "a", "da", "in", "con", "su", "per",
         "tra", "fra", "e", "o", "ma", "che", "non", "come", "poi", "quando", "mentre", "anche", "più", "molto",
-        "questo", "questa", "quello", "quella", "mi", "ti", "si", "ci", "vi", "lo", "la", "li", "le", "ne",
+        "questo", "questa", "quello", "quella", "mi", "ti", "si", "ci", "vi", "li", "ne",
         "sono", "sei", "è", "siamo", "siete", "ero", "eri", "era", "eravamo", "eravate", "erano",
         "ho", "hai", "ha", "abbiamo", "avete", "hanno", "avevo", "aveva", "stavo", "stava", "stavamo",
         "mio", "mia", "miei", "mie", "tuo", "tua", "suo", "sua", "loro", "nostro", "nostra",
@@ -114,9 +198,47 @@ object DreamInterpreter {
         "dove", "chi", "cui", "se", "già", "ancora", "sempre", "mai", "così", "tutto", "tutti", "tutta", "tutte"
     )
 
+    private val connectors = listOf(
+        "Accanto a questo, ", "C'è poi ", "Non meno importante: ", "A questo si intreccia ",
+        "Un altro filo del sogno riguarda ", "Vale la pena notare anche "
+    )
+
+    private val openings = listOf<(String) -> String>(
+        { snippet -> "Il sogno si apre così: \u00ab$snippet\u00bb. Da qui parte il filo che proviamo a seguire." },
+        { snippet -> "Colpisce, in questo racconto, il punto in cui dici: \u00ab$snippet\u00bb." },
+        { snippet -> "Partiamo da un dettaglio che hai scritto tu stesso: \u00ab$snippet\u00bb." },
+        { snippet -> "C'è un'immagine che resta impressa: \u00ab$snippet\u00bb." }
+    )
+
+    private val moodVariants = mapOf(
+        "luminoso" to listOf(
+            "Il tono emotivo che attraversa il racconto è disteso: sembra che questo sogno rifletta un momento di equilibrio, o un bisogno di leggerezza che sta finalmente trovando spazio nella tua vita da sveglio.",
+            "Nel complesso il sogno respira con calma: più che un allarme, sembra la fotografia di una fase in cui ti senti relativamente centrato.",
+            "L'atmosfera generale è più serena che inquieta - vale la pena chiedersi cosa, nella tua vita, sta contribuendo a questa sensazione di respiro."
+        ),
+        "inquieto" to listOf(
+            "Il tono emotivo che attraversa il racconto è teso: il sogno sembra dare voce a una preoccupazione o una tensione che chiede di essere riconosciuta, non necessariamente risolta subito.",
+            "C'è una corrente di disagio che percorre l'intero racconto - non per allarmarti, ma per suggerirti che qualcosa dentro di te sta chiedendo attenzione.",
+            "Il sogno porta con sé un peso emotivo evidente: prova a chiederti, senza giudicarti, da dove viene questa tensione nella tua vita reale."
+        ),
+        "ambivalente" to listOf(
+            "Il racconto non pende chiaramente né verso la leggerezza né verso il disagio: è un sogno più contemplativo, forse legato a un momento di passaggio o di attesa.",
+            "L'atmosfera resta sospesa tra due poli, come se il sogno stesso non sapesse ancora se stia elaborando qualcosa di buono o di difficile.",
+            "Il tono emotivo è misto, quasi in equilibrio precario - spesso è il segno di una fase di transizione, più che di una crisi o di una svolta netta."
+        )
+    )
+
+    private val closings = listOf(
+        "Questa lettura nasce dal confronto tra le tue parole e un dizionario simbolico generale: non è una previsione né una diagnosi, ma uno spunto per osservarti con più attenzione.",
+        "Prendi questa interpretazione come un punto di partenza, non come una verità assoluta: il significato più autentico del sogno lo conosci solo tu.",
+        "Nessuna lettura simbolica sostituisce ciò che senti tu stesso ripensando al sogno: usa queste righe come una lente in più, non come l'unica.",
+        "Come sempre in questi casi, il valore di questa interpretazione sta più nelle domande che apre che nelle risposte che offre."
+    )
+
     fun interpret(rawContent: String): Result {
         val content = rawContent.trim()
         val lower = content.lowercase()
+        val random = Random(seedFrom(lower))
 
         val matchedSymbols = symbolDictionary.filter { symbol ->
             symbol.keywords.any { keyword -> lower.contains(keyword) }
@@ -130,15 +252,11 @@ object DreamInterpreter {
             else -> "ambivalente"
         }
 
-        // Se il dizionario non ha trovato nulla, non ci arrendiamo: estraiamo
-        // le parole più ricorrenti e significative del racconto come simboli
-        // "personali" del sogno, per dare comunque uno spunto concreto.
         val personalKeywords = if (matchedSymbols.isEmpty()) extractPersonalKeywords(lower) else emptyList()
-
         val symbolLabels = if (matchedSymbols.isNotEmpty()) matchedSymbols.map { it.label } else personalKeywords
 
-        val title = buildTitle(symbolLabels, mood)
-        val interpretation = buildInterpretation(matchedSymbols, personalKeywords, mood)
+        val title = buildTitle(symbolLabels, mood, random)
+        val interpretation = buildInterpretation(content, matchedSymbols, personalKeywords, mood, random)
 
         return Result(
             title = title,
@@ -148,12 +266,13 @@ object DreamInterpreter {
         )
     }
 
-    /**
-     * Estrae fino a 3 parole "di contenuto" (lunghezza >= 4, non stopword)
-     * che compaiono più spesso nel testo, come indizio di ciò su cui il
-     * racconto insiste maggiormente. Semplice conteggio di frequenza, senza
-     * alcuna libreria linguistica esterna.
-     */
+    /** Seed stabile basato sul contenuto: stesso sogno -> stesso risultato. */
+    private fun seedFrom(lower: String): Long {
+        var h = 1125899906842597L
+        for (c in lower) h = 31 * h + c.code
+        return h
+    }
+
     private fun extractPersonalKeywords(lower: String): List<String> {
         val words = Regex("[a-zàèéìòù']+").findAll(lower)
             .map { it.value }
@@ -170,70 +289,82 @@ object DreamInterpreter {
             .map { it.key.replaceFirstChar { c -> c.uppercase() } }
     }
 
-    private fun buildTitle(symbolLabels: List<String>, mood: String): String {
-        if (symbolLabels.isEmpty()) {
-            return when (mood) {
-                "luminoso" -> "Un sogno di quiete"
-                "inquieto" -> "Un sogno inquieto"
-                else -> "Un sogno sospeso"
-            }
-        }
-        val main = symbolLabels.first()
-        return "Il sogno di $main".let { if (symbolLabels.size > 1) "$it e ${symbolLabels[1].lowercase()}" else it }
+    /** Estrae una frase breve (max ~14 parole) dall'inizio del racconto, da citare nell'apertura. */
+    private fun firstSnippet(content: String): String {
+        val firstSentence = content.split(Regex("[.!?\n]")).firstOrNull { it.isNotBlank() }?.trim() ?: content
+        val words = firstSentence.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val snippet = words.take(14).joinToString(" ")
+        return if (words.size > 14) "$snippet…" else snippet
     }
 
-    private fun buildInterpretation(symbols: List<Symbol>, personalKeywords: List<String>, mood: String): String {
-        val sb = StringBuilder()
+    private fun buildTitle(symbolLabels: List<String>, mood: String, random: Random): String {
+        if (symbolLabels.isEmpty()) {
+            val options = when (mood) {
+                "luminoso" -> listOf("Un sogno di quiete", "Un respiro leggero", "Una parentesi serena")
+                "inquieto" -> listOf("Un sogno inquieto", "Una tensione notturna", "Un allarme silenzioso")
+                else -> listOf("Un sogno sospeso", "Un passaggio incerto", "Un equilibrio precario")
+            }
+            return options[random.nextInt(options.size)]
+        }
+        val main = symbolLabels.first()
+        val templates = listOf(
+            "Il sogno di $main",
+            "Tra le immagini di $main",
+            "Ciò che porta con sé $main"
+        )
+        val base = templates[random.nextInt(templates.size)]
+        return if (symbolLabels.size > 1) "$base e ${symbolLabels[1].lowercase()}" else base
+    }
 
-        sb.appendLine("SIMBOLI RICORRENTI")
+    private fun buildInterpretation(
+        content: String,
+        symbols: List<Symbol>,
+        personalKeywords: List<String>,
+        mood: String,
+        random: Random
+    ): String {
+        val paragraphs = mutableListOf<String>()
+
+        val snippet = firstSnippet(content)
+        if (snippet.isNotBlank()) {
+            paragraphs += openings[random.nextInt(openings.size)](snippet)
+        }
+
         when {
             symbols.isNotEmpty() -> {
-                symbols.forEach { symbol ->
-                    sb.appendLine("• ${symbol.label}: ${symbol.meaning}")
+                val ordered = symbols.shuffled(random)
+                val sb = StringBuilder()
+                ordered.forEachIndexed { index, symbol ->
+                    val meaning = symbol.meanings[random.nextInt(symbol.meanings.size)]
+                    if (index == 0) {
+                        sb.append("Il primo elemento che risalta è ${symbol.label.lowercase()}: $meaning. ")
+                    } else {
+                        val connector = connectors[random.nextInt(connectors.size)]
+                        sb.append("$connector${symbol.label.lowercase()} - $meaning. ")
+                    }
                 }
+                paragraphs += sb.toString().trim()
             }
             personalKeywords.isNotEmpty() -> {
-                sb.appendLine(
-                    "Nel tuo racconto non compaiono simboli tra quelli più classici della tradizione onirica, " +
-                        "ma alcune parole ricorrono più delle altre e probabilmente portano il senso più personale " +
-                        "di questo sogno:"
+                val intro = listOf(
+                    "Non compaiono simboli tra quelli più classici della tradizione onirica, ma alcune parole ricorrono più delle altre nel tuo racconto e probabilmente portano il senso più personale di questo sogno: ",
+                    "Il tuo sogno non richiama gli archetipi più comuni, ma alcuni termini tornano più volte - vale la pena partire da lì: "
                 )
-                personalKeywords.forEach { keyword ->
-                    sb.appendLine("• $keyword: prova a chiederti cosa rappresenta per te nella vita da sveglio, e quale emozione porta con sé quando ci pensi.")
-                }
+                val kwPhrase = personalKeywords.joinToString(", ") { it.lowercase() }
+                paragraphs += intro[random.nextInt(intro.size)] + "$kwPhrase. Prova a chiederti cosa rappresentano per te nella vita reale, e quale emozione portano con sé quando ci pensi."
             }
             else -> {
-                sb.appendLine(
-                    "Il racconto è troppo breve o generico per individuare simboli specifici. Prova ad aggiungere " +
-                        "qualche dettaglio in più - luoghi, persone, oggetti, cosa provavi - per un'interpretazione più ricca."
-                )
+                paragraphs += "Il racconto è troppo breve o generico per individuare simboli specifici. Prova ad aggiungere qualche dettaglio in più - luoghi, persone, oggetti, cosa provavi - per un'interpretazione più ricca."
             }
         }
 
-        sb.appendLine()
-        sb.appendLine("DINAMICHE EMOTIVE")
-        sb.appendLine(
-            when (mood) {
-                "luminoso" -> "Il tono emotivo che emerge dal racconto è prevalentemente disteso: sembra che " +
-                    "questo sogno rifletta un momento di equilibrio o un desiderio di leggerezza che sta " +
-                    "trovando spazio nella tua vita da sveglio."
-                "inquieto" -> "Il tono emotivo che emerge dal racconto è teso: il sogno sembra dare voce a una " +
-                    "preoccupazione, una tensione irrisolta o una paura che chiede di essere riconosciuta, non " +
-                    "necessariamente risolta subito."
-                else -> "Il racconto non pende chiaramente né verso la leggerezza né verso il disagio: è un " +
-                    "sogno più contemplativo, che forse riflette un momento di passaggio o di attesa nella tua vita."
-            }
-        )
+        val moodOptions = moodVariants[mood] ?: emptyList()
+        if (moodOptions.isNotEmpty()) {
+            paragraphs += moodOptions[random.nextInt(moodOptions.size)]
+        }
 
-        sb.appendLine()
-        sb.appendLine("RIFLESSIONE FINALE")
-        sb.appendLine(
-            "Questa lettura nasce dal confronto tra le parole del tuo racconto e un dizionario simbolico " +
-                "generale: non è una previsione né una diagnosi, ma uno spunto per osservarti con più attenzione. " +
-                "Il significato più vero di un sogno lo conosce solo chi lo ha vissuto: lascia che questa " +
-                "interpretazione sia un punto di partenza, non una risposta definitiva."
-        )
+        paragraphs += closings[random.nextInt(closings.size)]
 
-        return sb.toString().trim()
+        return paragraphs.joinToString("\n\n")
     }
 }
