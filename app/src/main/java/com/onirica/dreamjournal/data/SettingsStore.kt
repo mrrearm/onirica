@@ -18,7 +18,7 @@ class SettingsStore(context: Context) {
         .getSharedPreferences("onirica_settings", Context.MODE_PRIVATE)
 
     var useAi: Boolean
-        get() = prefs.getBoolean(KEY_USE_AI, false)
+        get() = prefs.getBoolean(KEY_USE_AI, true)
         set(value) = prefs.edit().putBoolean(KEY_USE_AI, value).apply()
 
     companion object {
