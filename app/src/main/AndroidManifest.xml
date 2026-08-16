@@ -2,9 +2,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-        Nessun permesso di rete richiesto: Onirica funziona interamente offline.
-        Tutte le interpretazioni sono generate localmente sul dispositivo.
+        Il permesso INTERNET serve SOLO se l'utente attiva volontariamente
+        l'interpretazione AI (opzionale, disattivata di default) nelle
+        Impostazioni, inserendo una propria chiave API Groq gratuita.
+        Senza questa attivazione l'app resta completamente offline e usa
+        l'interprete locale basato su regole.
     -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"
